@@ -3,9 +3,9 @@
 This module is basically a high level interface to the central server.
 
 The module contains three communication classes: 1) The
-ClientNodeProtocol provides an interface from the Node to the central
-server, 2) The ClientUserProtocol provides an interface for users/
-researchers and finally 3) The ClientContainerProtocol which provides
+NodeClient provides an interface from the Node to the central
+server, 2) The UserClient provides an interface for users/
+researchers and finally 3) The ContainerClient which provides
 an interface for algorithms to the central server (this is mainly used
 by master containers).
 """
@@ -17,7 +17,7 @@ import datetime
 import typing
 
 # from vantage6.node.encryption import Cryptor, NoCryptor
-from vantage6.client import ClientBaseProtocol
+from vantage6.client import ClientBase
 from vantage6.node.util import (
     bytes_to_base64s,
     base64s_to_bytes
@@ -26,7 +26,7 @@ from vantage6.client import WhoAmI
 
 module_name = __name__.split('.')[1]
 
-class ClientContainerProtocol(ClientBaseProtocol):
+class ContainerClient(ClientBase):
     """ Container interface to the local proxy server (central server).
 
         A algorithm container (should) never communicate directly to the
@@ -165,7 +165,7 @@ class ClientContainerProtocol(ClientBaseProtocol):
         })
 
 
-class ClientNodeProtocol(ClientBaseProtocol):
+class NodeClient(ClientBase):
     """ Node interface to the central server."""
 
     def __init__(self, *args, **kwargs):
