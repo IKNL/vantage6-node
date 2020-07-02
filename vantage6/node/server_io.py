@@ -117,7 +117,7 @@ class ContainerClient(ClientBase):
 
     def post_task(self, name: str, image: str, collaboration_id: int,
                   input_: str = '', description='',
-                  organization_ids: list = []) -> dict:
+                  organization_ids: list = None) -> dict:
         """ Post a new task at the central server.
 
             ! To create a new task from the algorithm container you
@@ -140,6 +140,7 @@ class ContainerClient(ClientBase):
                 task should run
         """
         self.log.debug("post task without encryption (is handled by proxy)")
+        organization_ids = organization_ids if organization_ids else []
         organization_json_list = []
         for org_id in organization_ids:
             organization_json_list.append(
