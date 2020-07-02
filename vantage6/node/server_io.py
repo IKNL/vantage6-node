@@ -9,22 +9,15 @@ researchers and finally 3) The ContainerClient which provides
 an interface for algorithms to the central server (this is mainly used
 by master containers).
 """
-import logging
-import requests
-import time
 import jwt
 import datetime
-import typing
 
 # from vantage6.node.encryption import Cryptor, NoCryptor
 from vantage6.client import ClientBase
-from vantage6.node.util import (
-    bytes_to_base64s,
-    base64s_to_bytes
-)
 from vantage6.client import WhoAmI
 
 module_name = __name__.split('.')[1]
+
 
 class ContainerClient(ClientBase):
     """ Container interface to the local proxy server (central server).
@@ -40,7 +33,7 @@ class ContainerClient(ClientBase):
         we are happy that we can ignore this detail.
     """
 
-    def __init__(self, token:str, *args, **kwargs):
+    def __init__(self, token: str, *args, **kwargs):
         """ All permissions of the container are derived from the
             token.
 
@@ -51,7 +44,7 @@ class ContainerClient(ClientBase):
 
         # obtain the identity from the token
         container_identity = jwt.decode(token, verify=False)['identity']
-        self.image =  container_identity.get("image")
+        self.image = container_identity.get("image")
         self.host_node_id = container_identity.get("node_id")
         self.collaboration_id = container_identity.get("collaboration_id")
         self.log.info(
@@ -122,8 +115,9 @@ class ContainerClient(ClientBase):
             f"collaboration/{self.collaboration_id}/organization")
         return organizations
 
-    def post_task(self, name:str, image:str, collaboration_id:int,
-        input_:str='', description='', organization_ids:list=[]) -> dict:
+    def post_task(self, name: str, image: str, collaboration_id: int,
+                  input_: str = '', description='',
+                  organization_ids: list = []) -> dict:
         """ Post a new task at the central server.
 
             ! To create a new task from the algorithm container you
@@ -236,7 +230,7 @@ class NodeClient(ClientBase):
         })
 
     def get_results(self, id=None, state=None, include_task=False,
-        task_id=None):
+                    task_id=None):
         """ Obtain the results for a specific task.
 
             Overload the definition of the parent by entering the
@@ -311,3 +305,7 @@ class NodeClient(ClientBase):
 
         return self.request(f"result/{id}", json=result, method='patch')
 
+
+# aliases for backward compatibility
+ClientContainerProtocol = ContainerClient
+ClientNodeProtocol = NodeClient
