@@ -234,6 +234,8 @@ class Node(object):
             # basename (i.e. filename + ext).
             database_uri = os.path.basename(database_uri)
 
+            self.__docker.database_is_file = True
+
         # Connect to the isolated algorithm network *only* if we're running in
         # a docker container.
         if ctx.running_in_docker:
@@ -244,6 +246,10 @@ class Node(object):
 
         # Let's keep it safe
         self.__docker.set_database_uri(database_uri)
+
+        # Load additional environment vars for the algorithms. This is
+        # for example usefull when a password is needed for the database
+        self.__docker.algorithm_env = self.config.get('algorithm_env', {})
 
         # generate password for algorithm containers to login to the API
         # forwarder. This needs to be forwarded to the algorithm container.

@@ -54,7 +54,9 @@ class DockerManager(object):
         self.log.debug("Initializing DockerManager")
         self.data_volume_name = data_volume_name
         self.database_uri = None
+        self.database_is_file = False
         self.__tasks_dir = tasks_dir
+        self.algorithm_env = {}
 
         # Connect to docker daemon
         # self.docker = docker.DockerClient(base_url=docker_socket_path)
@@ -121,16 +123,26 @@ class DockerManager(object):
 
         try:
             network = self.docker.networks.get(name)
-            self.log.debug(f"Network {name} already exists.")
-
+            self.log.debug(f"Network {name} already exists. Deleting it.")
+            network.remove()
         except Exception:
-            self.log.debug(f"Creating isolated docker-network {name}")
-            network = self.docker.networks.create(
-                name,
-                driver="bridge",
-                internal=False,
-                scope="local"
+            self.log.debug("No network found...")
+
+        self.log.debug(f"Creating isolated docker-network {name}!")
+
+        internal_ = self.running_in_docker()
+        if not internal_:
+            self.log.warn(
+                "Algorithms have internet connection! "
+                "This happens because you use 'vnode-local'!"
             )
+
+        network = self.docker.networks.create(
+            name,
+            driver="bridge",
+            internal=internal_,
+            scope="local"
+        )
 
         return network
 
@@ -200,9 +212,10 @@ class DockerManager(object):
         try:
             self.log.info(f"Retrieving latest image: '{image}'")
             # self.docker.images.pull(image)
-            pull_if_newer(image, self.log)
+            pull_if_newer(self.docker, image, self.log)
 
         except Exception as e:
+            self.log.debug('Failed to pull image')
             self.log.error(e)
 
     def set_database_uri(self, database_uri):
@@ -307,7 +320,6 @@ class DockerManager(object):
             "OUTPUT_FILE": f"{data_folder}/{task_folder_name}/output",
             "TOKEN_FILE": f"{data_folder}/{task_folder_name}/token",
             "TEMPORARY_FOLDER": tmp_folder,
-            "DATABASE_URI": data_folder + "/" + self.database_uri,
             "HOST": f"http://{proxy_host}",
             "PORT": os.environ.get("PROXY_SERVER_PORT", 8080),
             "API_PATH": "",
@@ -315,8 +327,20 @@ class DockerManager(object):
             "API_FORWARDER_PORT": os.environ.get("API_FORWARDER_PORT"),
             "PUBLIC_IP": os.environ.get("PUBLIC_IP")
         }
-
+        if self.database_is_file:
+            environment_variables["DATABASE_URI"] = \
+                f"{data_folder}/{self.database_uri}"
+        else:
+             environment_variables["DATABASE_URI"] = self.database_uri
         self.log.debug(f"environment: {environment_variables}")
+
+        # Load additional environment variables
+        if self.algorithm_env:
+            environment_variables = \
+                {**environment_variables, **self.algorithm_env}
+            self.log.info('Custom environment variables are loaded!')
+            self.log.debug(f"custom environment: {self.algorithm_env}")
+
         self.log.debug(f"volumes: {volumes}")
 
         # attempt to run the image

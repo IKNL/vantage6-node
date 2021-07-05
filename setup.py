@@ -34,15 +34,15 @@ setup(
     python_requires='>=3.6',
     install_requires=[
         'requests==2.23.0',
-        'gevent==1.4.0',
+        'gevent==1.3.4',
         'socketIO-client==0.7.2',
         'docker==4.2.0',
         'cryptography==2.8',
         'click==7.1.1',
         'termcolor==1.1.0',
         'bcrypt==3.1.7',
-        'vantage6 >= 1.2.0',
-        'vantage6-client >= 1.2.0',
+        'vantage6 >= 1.2.3',
+        'vantage6-client >= 1.2.3',
     ],
     extras_require={
         'dev': [
