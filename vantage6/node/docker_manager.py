@@ -325,7 +325,7 @@ class DockerManager(object):
             "API_PATH": "",
             "API_FORWARDER_PASSWORD": os.environ.get("API_FORWARDER_PASSWORD"),
             "API_FORWARDER_PORT": os.environ.get("API_FORWARDER_PORT"),
-            "PUBLIC_IP": os.environ.get("PUBLIC_IP")
+            "PUBLIC_IP": os.environ.get("PUBLIC_IP", '0.0.0.0')
         }
         if self.database_is_file:
             environment_variables["DATABASE_URI"] = \

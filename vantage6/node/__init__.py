@@ -23,6 +23,7 @@ import logging
 import queue
 import shutil
 import json
+import uuid
 
 from pathlib import Path
 from threading import Thread
@@ -253,8 +254,10 @@ class Node(object):
 
         # generate password for algorithm containers to login to the API
         # forwarder. This needs to be forwarded to the algorithm container.
-        os.environ["API_FORWARDER_PASSWORD"] = str(uuid1.uuid1())
-        os.environ["PUBLIC_IP"] = self.config.get("public_ip")
+        api_password = str(uuid.uuid1())
+        os.environ["API_FORWARDER_PASSWORD"] = api_password
+        self.log.info(f'API Forwarder password: {api_password}')
+        os.environ["PUBLIC_IP"] = self.config.get("public_ip", '0.0.0.0')
 
         # Thread for sending results to the server when they come available.
         self.log.debug("Start thread for sending messages (results)")
@@ -270,9 +273,8 @@ class Node(object):
         self.log.info('Init complete')
 
     def __api_forwarder_worker(self):
-        proxy_port = self.config.get('api_forwarder_port',
-                                     random.randint(2048, 16384))
-        os.environ["API_FORWARDER_PORT"] = proxy_port
+        proxy_port = self.config.get('api_forwarder_port', 5555)
+        os.environ["API_FORWARDER_PORT"] = str(proxy_port)
         http_server = WSGIServer(('0.0.0.0', proxy_port), api_forward_app)
         try:
             http_server.serve_forever()

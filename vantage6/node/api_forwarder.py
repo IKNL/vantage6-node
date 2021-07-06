@@ -16,13 +16,12 @@ import uuid
 import datetime
 
 from flask import Flask, request, jsonify
-from flask_jwt_extended.jwt_manager import (
-    JWTManager,
+from flask_jwt_extended.jwt_manager import JWTManager
+from flask_jwt_extended import (
     jwt_required,
     create_access_token,
     get_jwt_identity
 )
-
 from vantage6.node.util import logger_name
 
 
