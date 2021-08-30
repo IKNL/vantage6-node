@@ -23,6 +23,7 @@ import logging
 import queue
 import shutil
 import json
+import signal
 
 from pathlib import Path
 from threading import Thread
@@ -35,6 +36,20 @@ from vantage6.node.docker_manager import DockerManager
 from vantage6.node.server_io import NodeClient
 from vantage6.node.proxy_server import app
 from vantage6.node.util import logger_name
+
+
+# TODO BvB 2021-08-30: I'm not happy having this class here, but not sure where
+# it belongs. Let's discuss this
+class ContainerKillListener:
+    """ Listen for signals that the docker container should be shut down """
+    kill_now = False
+
+    def __init__(self):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
+    def exit_gracefully(self, *args):
+        self.kill_now = True
 
 
 class NodeTaskNamespace(SocketIONamespace):
@@ -562,13 +577,14 @@ class Node(object):
 
     def run_forever(self):
         """Forever check self.queue for incoming tasks (and execute them)."""
+        kill_listener = ContainerKillListener()
         try:
             while True:
                 # blocking untill a task comes available
                 # timeout specified, else Keyboard interupts are ignored
                 self.log.info("Waiting for new tasks....")
 
-                while True:
+                while not kill_listener.kill_now:
                     try:
                         task = self.queue.get(timeout=1)
                         # if no item is returned, the Empty exception is
@@ -581,14 +597,17 @@ class Node(object):
                     except Exception as e:
                         self.log.debug(e)
 
+                if kill_listener.kill_now:
+                    raise InterruptedError
+
                 # if task comes available, attempt to execute it
                 try:
                     self.__start_task(task)
                 except Exception as e:
                     self.log.exception(e)
 
-        except KeyboardInterrupt:
-            self.log.debug("Caught a keyboard interupt, shutting down...")
+        except (KeyboardInterrupt, InterruptedError):
+            self.log.info("Vnode is interrupted, shutting down...")
             self.socketIO.disconnect()
             sys.exit()
 
