@@ -23,7 +23,6 @@ import logging
 import queue
 import shutil
 import json
-import signal
 
 from pathlib import Path
 from threading import Thread
@@ -32,24 +31,11 @@ from gevent.pywsgi import WSGIServer
 
 from . import globals as cs
 
+from vantage6.common.docker_addons import ContainerKillListener
 from vantage6.node.docker_manager import DockerManager
 from vantage6.node.server_io import NodeClient
 from vantage6.node.proxy_server import app
 from vantage6.node.util import logger_name
-
-
-# TODO BvB 2021-08-30: I'm not happy having this class here, but not sure where
-# it belongs. Let's discuss this
-class ContainerKillListener:
-    """ Listen for signals that the docker container should be shut down """
-    kill_now = False
-
-    def __init__(self):
-        signal.signal(signal.SIGINT, self.exit_gracefully)
-        signal.signal(signal.SIGTERM, self.exit_gracefully)
-
-    def exit_gracefully(self, *args):
-        self.kill_now = True
 
 
 class NodeTaskNamespace(SocketIONamespace):
