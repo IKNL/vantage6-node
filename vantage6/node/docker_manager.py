@@ -331,7 +331,7 @@ class DockerManager(object):
             "API_PATH": "",
         }
 
-        # Oonly prepend the data_folder is it is a file-based database
+        # Only prepend the data_folder is it is a file-based database
         # note that this part of the code is in preperation for 3+. This
         # would allow algorithms to access multiple data-sources at the
         # same time
