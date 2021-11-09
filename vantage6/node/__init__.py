@@ -383,7 +383,8 @@ class Node(object):
             image=task["image"],
             docker_input=taskresult['input'],
             tmp_vol_name=vol_name,
-            token=token
+            token=token,
+            database=task['database']
         )
 
     def __listening_worker(self):
