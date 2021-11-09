@@ -210,21 +210,24 @@ class Node(object):
             self.ctx.config.get("docker_registries", [])
         )
 
-        # If we're running in a docker container, database_uri would point
-        # to a path on the *host* (since it's been read from the config
-        # file). That's no good here. Therefore, we expect the CLI to set
-        # the environment variable for us. This has the added bonus that we
-        # can override the URI from the command line as well.
         databases = {}
+
+        # Check that the `default` database label is present. If this is
+        # not the case, older algorithms will break
         db_labels = self.config['databases'].keys()
         if 'default' not in db_labels:
             self.log.error("'default' database not specified in the config!")
             self.log.debug(f'databases in config={db_labels}')
 
+        # If we're running in a docker container, database_uri would point
+        # to a path on the *host* (since it's been read from the config
+        # file). That's no good here. Therefore, we expect the CLI to set
+        # the environment variables for us. This has the added bonus that we
+        # can override the URI from the command line as well.
         for label in db_labels:
-            LABEL = label.upper()
+            label_upper = label.upper()
             if self.__docker.running_in_docker():
-                uri = os.environ[f'{LABEL}_DATABASE_URI']
+                uri = os.environ[f'{label_upper}_DATABASE_URI']
             else:
                 uri = self.config['databases'][label]
 
@@ -234,9 +237,9 @@ class Node(object):
                 self.log.info(f'Copying {uri} to {task_dir}')
                 shutil.copy(uri, task_dir)
 
-                # Since we've copied the database to the folder 'data' in the root
-                # of the volume: '/data/<database.csv>'. We'll just keep the
-                # basename (i.e. filename + ext).
+                # Since we've copied the database to the folder 'data' in the
+                # root of the volume: '/data/<database.csv>'. We'll just keep
+                # the basename (i.e. filename + ext).
                 uri = os.path.basename(uri)
 
                 self.__docker.database_is_file = True
