@@ -44,22 +44,3 @@ class DockerBaseManager(object):
             log.warn("Removing container that was already running: "
                      f"{container.name}")
             remove_container(container, kill=True)
-
-    def get_isolated_netw_ip(self, container) -> str:
-        """
-        Get address of a container in the isolated network
-
-        Parameters
-        ----------
-        container: Container
-            Docker container whose IP address should be obtained
-
-        Returns
-        -------
-        str
-            IP address of a container in isolated network
-        """
-        container.reload()
-        return container.attrs[
-            'NetworkSettings'
-        ]['Networks'][self.isolated_network_mgr.network_name]['IPAddress']

@@ -21,6 +21,10 @@ from vantage6.node.docker.vpn_manager import VPNManager
 from vantage6.node.util import logger_name
 from vantage6.node.docker.network_manager import IsolatedNetworkManager
 from vantage6.node.docker.task_manager import DockerTaskManager
+from vantage6.node.docker.configure_host import (
+    configure_host_network, find_isolated_bridge, remove_host_exceptions
+)
+
 
 log = logging.getLogger(logger_name(__name__))
 
@@ -89,6 +93,11 @@ class DockerManager(DockerBaseManager):
 
         # set database uri and whether or not it is a file
         self._set_database(config)
+
+        # set up whitelist for algorithm communication
+        self.whitelist = config.get('whitelist')
+        if self.whitelist:
+            self.setup_whitelisting()
 
     def _set_database(self, config: Dict) -> None:
         """"
@@ -197,16 +206,25 @@ class DockerManager(DockerBaseManager):
 
     def cleanup(self) -> None:
         """
-        Stop all active tasks and delete the isolated network
+        Cleanup the docker resources. This is run on node shutdown.
 
-        Note: the temporary docker volumes are kept as they may still be used
-        by a master container
+        Stop all active tasks, delete the isolated network and remove
+        whitelisted IP rules. Note: the temporary docker volumes are kept as
+        they may still be used by a master container
         """
+        # kill any running tasks
         if self.active_tasks:
             self.log.debug(f'Killing {len(self.active_tasks)} active task(s)')
         while self.active_tasks:
             task = self.active_tasks.pop()
             task.cleanup()
+        # remove whitelisted IP rules from the host network
+        if hasattr(self, 'whitelist'):
+            remove_host_exceptions(
+                docker_client=self.docker,
+                n_whitelists_to_remove=len(self.whitelist)
+            )
+        # delete the isolated network
         self.isolated_network_mgr.cleanup()
 
     def run(self, result_id: int,  image: str, docker_input: bytes,
@@ -330,3 +348,21 @@ class DockerManager(DockerBaseManager):
             except docker.errors.APIError as e:
                 self.log.warn(f"Could not login to {registry.get('registry')}")
                 self.log.debug(e)
+
+    def setup_whitelisting(self) -> None:
+        """
+        Allow node (and its algorithms) to connect to whitelisted IP addresses
+
+        Setup the host network so that whitelisted IP addresses from the config
+        file are accepted into the isolated network
+        """
+        self.log.info("Setting up whitelisting")
+        bridge_interface = find_isolated_bridge(
+            docker_client=self.docker,
+            isolated_network_mgr=self.isolated_network_mgr
+        )
+        for whitelisted in self.whitelist:
+            configure_host_network(
+                docker_client=self.docker, isolated_bridge=bridge_interface,
+                subnet=whitelisted
+            )

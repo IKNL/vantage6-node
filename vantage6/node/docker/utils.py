@@ -34,3 +34,27 @@ def remove_container(container: Container, kill=False) -> None:
     except Exception as e:
         log.error(f"Failed to remove container {container.name}")
         log.debug(e)
+
+
+def get_network_ip(container, network_name) -> str:
+    """
+    Get address of a container in a network
+
+    Parameters
+    ----------
+    container: Container
+        Docker container whose IP address should be obtained
+
+    Returns
+    -------
+    str
+        IP address of a container in isolated network
+    """
+    container.reload()
+    try:
+        return container.attrs['NetworkSettings']['Networks'][network_name][
+            'IPAddress']
+    except Exception as e:
+        log.warn(f"Could not find container {container.name} in network "
+                 f"{network_name}")
+        return None
