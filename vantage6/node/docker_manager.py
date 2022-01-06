@@ -140,7 +140,7 @@ class DockerManager(object):
         network = self.docker.networks.create(
             name,
             driver="bridge",
-            internal=internal_,
+            internal=False,
             scope="local"
         )
 
@@ -356,7 +356,13 @@ class DockerManager(object):
                     f"{APPNAME}-type": "algorithm",
                     "node": self.node_name,
                     "result_id": str(result_id)
-                }
+                },
+                device_requests=[
+                    docker.types.DeviceRequest(
+                        count=-1,
+                        capabilities=[['gpu']]
+                    )
+                ]
             )
         except Exception as e:
             self.log.error('Could not run docker image!?')
