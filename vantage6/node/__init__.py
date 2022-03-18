@@ -657,7 +657,6 @@ class Node(object):
         self.socketIO.connect(
             url=f'{self.server_io.host}:{self.server_io.port}',
             headers=self.server_io.headers,
-            namespaces=['/tasks']
         )
 
         self.socketIO.register_namespace(NodeTaskNamespace('/tasks'))
