@@ -16,7 +16,7 @@ from vantage6.node.globals import (
     MAX_CHECK_VPN_ATTEMPTS, NETWORK_CONFIG_IMAGE, VPN_CLIENT_IMAGE,
     FREE_PORT_RANGE, DEFAULT_ALGO_VPN_PORT
 )
-from vantage6.node.docker.network_manager import IsolatedNetworkManager
+from vantage6.node.docker.network_manager import NetworkManager
 from vantage6.node.docker.docker_base import DockerBaseManager
 
 
@@ -27,7 +27,7 @@ class VPNManager(DockerBaseManager):
     """
     log = logging.getLogger(logger_name(__name__))
 
-    def __init__(self, isolated_network_mgr: IsolatedNetworkManager,
+    def __init__(self, isolated_network_mgr: NetworkManager,
                  node_name: str, vpn_volume_name: str, vpn_subnet: str):
         super().__init__(isolated_network_mgr)
 

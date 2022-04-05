@@ -1,3 +1,4 @@
+from typing import List, Union
 import docker
 import logging
 
@@ -14,31 +15,33 @@ def remove_subnet_mask(ip: str) -> str:
     return ip[0:ip.find('/')]
 
 
-class IsolatedNetworkManager(object):
+class NetworkManager(object):
     """
-    Handle the isolated docker network
+    Handle a Docker network
     """
 
     log = logging.getLogger(logger_name(__name__))
 
     def __init__(self, network_name: str):
         """
-        Initialize the IsolatedNetworkManager
+        Initialize the NetworkManager
 
         Parameters
         ----------
         network_name: str
-            Name of the isolated network
+            Name of the network
         """
         self.network_name = network_name
 
         # Connect to docker daemon
         self.docker = docker.from_env()
 
-        # create isolated network
-        self.isolated_network = self.create_network()
+        # create network
+        self.network = self.create_network()
 
-    def create_network(self) -> docker.models.networks.Network:
+    def create_network(
+        self, is_internal: bool = True
+    ) -> docker.models.networks.Network:
         """
         Creates an internal (docker) network
 
@@ -50,8 +53,9 @@ class IsolatedNetworkManager(object):
             Created docker network
         """
         self.log.debug(
-            f"Creating isolated docker-network {self.network_name}!")
-        self._delete_existing_network()
+            f"Creating Docker network {self.network_name}!")
+        # Delete network if it already exists
+        self.delete()
 
         internal_ = running_in_docker()
         if not internal_:
@@ -63,13 +67,19 @@ class IsolatedNetworkManager(object):
         network = self.docker.networks.create(
             self.network_name,
             driver="bridge",
-            internal=internal_,
+            internal=is_internal,
             scope="local",
         )
         return network
 
-    def _delete_existing_network(self):
-        """ Delete isolated network before creating a new one """
+    def delete(self, kill_containers: bool = True) -> None:
+        """ Delete network
+
+        Parameters
+        ----------
+        kill_containers: bool
+            If true, kill and remove any containers in the network
+        """
         networks = self.docker.networks.list(
             names=[self.network_name]
         )
@@ -78,56 +88,63 @@ class IsolatedNetworkManager(object):
         self.log.debug(
             f"Network {self.network_name} already exists. Deleting it.")
         for network in networks:
-            # delete any containers that were still attached to the network
-            network.reload()
-            for container in network.containers:
-                self.log.warn(
-                    f"Removing container {container.name} in old network")
-                remove_container(container, kill=True)
-            # then remove the network
+            if kill_containers:
+                # delete any containers that were still attached to the network
+                network.reload()
+                for container in network.containers:
+                    self.log.warn(
+                        f"Removing container {container.name} in old network")
+                    remove_container(container, kill=True)
+            # remove the network
             try:
                 network.remove()
             except Exception:
-                self.log.warn("Could not delete existing isolated network")
+                self.log.warn(
+                    f"Could not delete existing network {self.network_name}")
 
-    def connect(self, container_name, aliases=None, ipv4=None):
-        """Connect to the isolated network."""
-        msg = f"Connecting to isolated network '{self.network_name}'"
-        self.log.debug(msg)
+    def connect(self, container_name: str, aliases: List[str] = [],
+                ipv4: Union[str, None] = None) -> None:
+        """
+        Connect a container to the network.
 
-        # If the network already exists, this is a no-op.
-        self.isolated_network.connect(
+        Parameters
+        ----------
+        container_name: str
+            Name of the container that should be connected to the network
+        aliases: List[str]
+            A list of aliases for the container in the network
+        ipv4: str
+            An IP address to assign to the container in the network
+        """
+        self.log.debug(
+            f"Connecting {container_name} to network '{self.network_name}'")
+        self.network.connect(
             container_name, aliases=aliases, ipv4_address=ipv4
         )
 
-    def cleanup(self):
-        """Delete the isolated network"""
-        try:
-            self.isolated_network.remove()
-        except Exception as e:
-            self.log.error("Could not remove isolated network")
-            self.log.error(e)
-
     def get_container_ip(self, container_name: str) -> str:
         """
-        Get IP address of the VPN client in the isolated network
+        Get IP address of a container in the network
+
+        Parameters
+        ----------
+        container_name: str
+            Name of the container whose IP address is sought
 
         Returns
         -------
         str
-            IP address of VPN client container in the isolated network
+            IP address of the container in the network
         """
-        self.isolated_network.reload()
+        self.network.reload()
         ip = None
-        isol_net_containers = self.isolated_network.attrs['Containers']
-        for container_id, container_dict in isol_net_containers.items():
+        containers = self.network.attrs['Containers']
+        for container_id, container_dict in containers.items():
             if container_dict['Name'] == container_name:
                 ip = container_dict['IPv4Address']
         if not ip:
-            self.log.warn(
-                f"IP Address for container {container_name} not found in the "
-                "isolated network"
-            )
+            self.log.warn(f"IP Address for container {container_name} not "
+                          "found in the network")
             return None
         ip = remove_subnet_mask(ip)
         return ip
