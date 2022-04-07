@@ -81,6 +81,12 @@ class VPNManager(DockerBaseManager):
             devices=['/dev/net/tun'],
         )
 
+        # check successful initiation of VPN connection
+        if self.has_connection():
+            self.log.info("VPN client container was successfully started!")
+        else:
+            raise ConnectionError("VPN connection not established!")
+
         # attach vpnclient to isolated network
         self.log.debug("Connecting VPN client container to isolated network")
         self.isolated_network_mgr.connect(
@@ -96,12 +102,6 @@ class VPNManager(DockerBaseManager):
                            "interface of isolated network")
             return
         self._configure_host_network()
-
-        # check successful initiation of VPN connection
-        if self.has_connection():
-            self.log.info("VPN client container was successfully started!")
-        else:
-            raise ConnectionError("VPN connection not established!")
 
     def has_connection(self) -> bool:
         """ Return True if VPN connection is active """
