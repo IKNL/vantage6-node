@@ -8,7 +8,7 @@ from typing import List, Union, Dict
 from docker.models.containers import Container
 
 from vantage6.common.globals import APPNAME, VPN_CONFIG_FILE
-from vantage6.common.docker_addons import (
+from vantage6.common.docker.addons import (
     remove_container_if_exists, remove_container
 )
 from vantage6.node.util import logger_name
@@ -16,7 +16,7 @@ from vantage6.node.globals import (
     MAX_CHECK_VPN_ATTEMPTS, NETWORK_CONFIG_IMAGE, VPN_CLIENT_IMAGE,
     FREE_PORT_RANGE, DEFAULT_ALGO_VPN_PORT
 )
-from vantage6.node.docker.network_manager import NetworkManager
+from vantage6.common.docker.network_manager import NetworkManager
 from vantage6.node.docker.docker_base import DockerBaseManager
 
 

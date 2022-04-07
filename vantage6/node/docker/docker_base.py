@@ -1,6 +1,6 @@
 import docker
 
-from vantage6.node.docker.network_manager import NetworkManager
+from vantage6.common.docker.network_manager import NetworkManager
 
 
 class DockerBaseManager(object):
