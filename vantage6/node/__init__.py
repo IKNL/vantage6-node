@@ -206,6 +206,10 @@ class Node(object):
                 aliases=[NODE_PROXY_SERVER_HOSTNAME]
             )
 
+        # Connect any docker services specified in the configuration file to
+        # the node container
+        self.link_docker_services()
+
         # Thread for sending results to the server when they come available.
         self.log.debug("Start thread for sending messages (results)")
         t = Thread(target=self.__speaking_worker, daemon=True)
@@ -645,6 +649,13 @@ class Node(object):
         with open(ovpn_file, 'w') as f:
             f.write(ovpn_config)
         return True
+
+    def link_docker_services(self):
+        docker_services = self.ctx.config.get("docker_services")
+        print(docker_services)
+        if not docker_services:
+            return
+        self.log.info("Linking docker services specified in the configuration")
 
     def connect_to_socket(self):
         """ Create long-lasting websocket connection with the server.
