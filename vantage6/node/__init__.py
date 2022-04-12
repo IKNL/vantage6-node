@@ -652,10 +652,11 @@ class Node(object):
 
     def link_docker_services(self):
         docker_services = self.ctx.config.get("docker_services")
-        print(docker_services)
         if not docker_services:
             return
         self.log.info("Linking docker services specified in the configuration")
+        for _, container_name in docker_services.items():
+            self.__docker.link_container_to_network(container_name)
 
     def connect_to_socket(self):
         """ Create long-lasting websocket connection with the server.
