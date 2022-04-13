@@ -655,8 +655,10 @@ class Node(object):
         if not docker_services:
             return
         self.log.info("Linking docker services specified in the configuration")
-        for _, container_name in docker_services.items():
-            self.__docker.link_container_to_network(container_name)
+        for alias, container_name in docker_services.items():
+            self.__docker.link_container_to_network(
+                container_name=container_name, config_alias=alias
+            )
 
     def connect_to_socket(self):
         """ Create long-lasting websocket connection with the server.
