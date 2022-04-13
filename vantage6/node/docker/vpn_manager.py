@@ -8,7 +8,7 @@ from typing import List, Union, Dict
 from docker.models.containers import Container
 
 from vantage6.common.globals import APPNAME, VPN_CONFIG_FILE
-from vantage6.common.docker_addons import (
+from vantage6.common.docker.addons import (
     remove_container_if_exists, remove_container
 )
 from vantage6.node.util import logger_name
@@ -16,7 +16,7 @@ from vantage6.node.globals import (
     MAX_CHECK_VPN_ATTEMPTS, NETWORK_CONFIG_IMAGE, VPN_CLIENT_IMAGE,
     FREE_PORT_RANGE, DEFAULT_ALGO_VPN_PORT, ALPINE_IMAGE
 )
-from vantage6.node.docker.network_manager import IsolatedNetworkManager
+from vantage6.common.docker.network_manager import NetworkManager
 from vantage6.node.docker.docker_base import DockerBaseManager
 
 
@@ -109,12 +109,12 @@ class VPNManager(DockerBaseManager):
 
         # create network exception so that packet transfer between VPN network
         # and the vpn client container is allowed
-        bridge_interface = self._find_isolated_bridge()
-        if not bridge_interface:
+        self.isolated_bridge = self._find_isolated_bridge()
+        if not self.isolated_bridge:
             self.log.error("Setting up VPN failed: could not find bridge "
                            "interface of isolated network")
             return
-        self._configure_host_network(isolated_bridge=bridge_interface)
+        self._configure_host_network()
 
         # set successful initiation of VPN connection
         self.has_vpn = True
@@ -150,10 +150,16 @@ class VPNManager(DockerBaseManager):
         remove_container(self.vpn_client_container, kill=True)
 
         # Clean up host network changes. We have added two rules to the front
-        # of the DOCKER-USER chain. Now we remove the first two rules (which is
-        # done by removing rule number 1 twice)
-        command = \
-            'sh -c "iptables -D DOCKER-USER 1; iptables -D DOCKER-USER 1;"'
+        # of the DOCKER-USER chain. We now execute more or less the same
+        # commands, but with -D (delete) instead of -I (insert)
+        command = (
+            'sh -c "'
+            f'iptables -D DOCKER-USER -d {self.subnet} '
+            f'-i {self.isolated_bridge} -j ACCEPT; '
+            f'iptables -D DOCKER-USER -s {self.subnet} '
+            f'-o {self.isolated_bridge} -j ACCEPT; '
+            '"'
+        )
         self.docker.containers.run(
             image=NETWORK_CONFIG_IMAGE,
             network='host',
@@ -440,28 +446,21 @@ class VPNManager(DockerBaseManager):
         else:
             return False
 
-    def _configure_host_network(self, isolated_bridge: str) -> None:
+    def _configure_host_network(self) -> None:
         """
         By default the internal bridge networks are configured to prohibit
         packet forwarding between networks. Create an exception to this rule
         for forwarding traffic between the bridge and vpn network.
-
-        Parameters
-        ----------
-        vpn_subnet: string
-            Subnet of allowed VPN IP addresses
-        isolated_bridge: string
-            Name of the network interface in the host namespace
         """
         self.log.debug("Configuring host network exceptions for VPN")
         # The following command inserts rules that traffic from the VPN subnet
         # will be accepted into the isolated network
         command = (
             'sh -c "'
-            f'iptables -I DOCKER-USER 1 -d {self.subnet} -i {isolated_bridge} '
-            '-j ACCEPT; '
-            f'iptables -I DOCKER-USER 1 -s {self.subnet} -o {isolated_bridge} '
-            '-j ACCEPT; '
+            f'iptables -I DOCKER-USER 1 -d {self.subnet} '
+            f'-i {self.isolated_bridge} -j ACCEPT; '
+            f'iptables -I DOCKER-USER 1 -s {self.subnet} '
+            f'-o {self.isolated_bridge} -j ACCEPT; '
             '"'
         )
 
