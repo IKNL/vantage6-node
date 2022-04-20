@@ -92,6 +92,9 @@ class DockerManager(DockerBaseManager):
         # set database uri and whether or not it is a file
         self._set_database(config)
 
+        # keep track of linked docker services
+        self.linked_services: List[str] = []
+
     def _set_database(self, config: Dict) -> None:
         """"
         Set database location and whether or not it is a file
@@ -221,7 +224,9 @@ class DockerManager(DockerBaseManager):
         while self.active_tasks:
             task = self.active_tasks.pop()
             task.cleanup()
-        self.isolated_network_mgr.cleanup()
+        for service in self.linked_services:
+            self.isolated_network_mgr.disconnect(service)
+        self.isolated_network_mgr.delete()
 
     def run(self, result_id: int,  image: str, docker_input: bytes,
             tmp_vol_name: str, token: str, database: str
@@ -374,3 +379,4 @@ class DockerManager(DockerBaseManager):
             container_name=container_name,
             aliases=[config_alias]
         )
+        self.linked_services.append(container_name)
