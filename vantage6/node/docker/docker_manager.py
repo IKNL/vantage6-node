@@ -15,13 +15,12 @@ import shutil
 from typing import Dict, List, NamedTuple, Union
 from pathlib import Path
 
-from vantage6.common.docker_addons import get_container
+from vantage6.common.docker.addons import get_container, running_in_docker
 from vantage6.common.globals import APPNAME
 from vantage6.node.docker.docker_base import DockerBaseManager
-from vantage6.node.docker.utils import running_in_docker
 from vantage6.node.docker.vpn_manager import VPNManager
 from vantage6.node.util import logger_name
-from vantage6.node.docker.network_manager import IsolatedNetworkManager
+from vantage6.common.docker.network_manager import NetworkManager
 from vantage6.node.docker.task_manager import DockerTaskManager
 
 log = logging.getLogger(logger_name(__name__))
@@ -46,7 +45,7 @@ class DockerManager(DockerBaseManager):
     """
     log = logging.getLogger(logger_name(__name__))
 
-    def __init__(self, ctx, isolated_network_mgr: IsolatedNetworkManager,
+    def __init__(self, ctx, isolated_network_mgr: NetworkManager,
                  vpn_manager: VPNManager, tasks_dir: Path) -> None:
         """ Initialization of DockerManager creates docker connection and
             sets some default values.
@@ -55,7 +54,7 @@ class DockerManager(DockerBaseManager):
             ----------
             ctx: DockerNodeContext or NodeContext
                 Context object from which some settings are obtained
-            isolated_network_mgr: IsolatedNetworkManager
+            isolated_network_mgr: NetworkManager
                 Manager for the isolated network
             vpn_manager: VPNManager
                 VPN Manager object
@@ -70,6 +69,7 @@ class DockerManager(DockerBaseManager):
         self.algorithm_env = config.get('algorithm_env', {})
         self.vpn_manager = vpn_manager
         self.__tasks_dir = tasks_dir
+        self.alpine_image = config.get('alpine')
 
         # keep track of the running containers
         self.active_tasks: List[DockerTaskManager] = []
@@ -276,7 +276,8 @@ class DockerManager(DockerBaseManager):
             tasks_dir=self.__tasks_dir,
             isolated_network_mgr=self.isolated_network_mgr,
             databases=self.databases,
-            docker_volume_name=self.data_volume_name
+            docker_volume_name=self.data_volume_name,
+            alpine_image=self.alpine_image
         )
         database = database if (database and len(database)) else 'default'
         vpn_ports = task.run(

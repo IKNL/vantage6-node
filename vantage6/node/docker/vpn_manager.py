@@ -8,15 +8,15 @@ from typing import List, Union, Dict
 from docker.models.containers import Container
 
 from vantage6.common.globals import APPNAME, VPN_CONFIG_FILE
-from vantage6.common.docker_addons import (
+from vantage6.common.docker.addons import (
     remove_container_if_exists, remove_container
 )
 from vantage6.node.util import logger_name
 from vantage6.node.globals import (
     MAX_CHECK_VPN_ATTEMPTS, NETWORK_CONFIG_IMAGE, VPN_CLIENT_IMAGE,
-    FREE_PORT_RANGE, DEFAULT_ALGO_VPN_PORT
+    FREE_PORT_RANGE, DEFAULT_ALGO_VPN_PORT, ALPINE_IMAGE
 )
-from vantage6.node.docker.network_manager import IsolatedNetworkManager
+from vantage6.common.docker.network_manager import NetworkManager
 from vantage6.node.docker.docker_base import DockerBaseManager
 
 
@@ -27,13 +27,32 @@ class VPNManager(DockerBaseManager):
     """
     log = logging.getLogger(logger_name(__name__))
 
-    def __init__(self, isolated_network_mgr: IsolatedNetworkManager,
-                 node_name: str, vpn_volume_name: str, vpn_subnet: str):
+    def __init__(self, isolated_network_mgr: NetworkManager,
+                 node_name: str, vpn_volume_name: str, vpn_subnet: str,
+                 alpine_image: Union[str, None] = None) -> None:
+        """
+        Initializes a VPN manager instance
+
+        Parameters
+        ----------
+        isolated_network_mgr: NetworkManager
+            An object that manages the node's isolated network
+        node_name: str
+            The name of the node (from config)
+        vpn_volume_name: str
+            The name of the volume in which the VPN data resides
+        vpn_subnet: str
+            The IP mask of the VPN subnet
+        alpine_image: str or None
+            Name of alternative Alpine image to be used
+        """
         super().__init__(isolated_network_mgr)
 
         self.vpn_client_container_name = f'{APPNAME}-{node_name}-vpn-client'
         self.vpn_volume_name = vpn_volume_name
         self.subnet = vpn_subnet
+        self.alpine_image = ALPINE_IMAGE if alpine_image is None \
+            else alpine_image
 
         self.has_vpn = False
 
@@ -88,6 +107,12 @@ class VPNManager(DockerBaseManager):
             aliases=[self.vpn_client_container_name]
         )
 
+        # check successful initiation of VPN connection
+        if self.has_connection():
+            self.log.info("VPN client container was successfully started!")
+        else:
+            raise ConnectionError("VPN connection not established!")
+
         # create network exception so that packet transfer between VPN network
         # and the vpn client container is allowed
         self.isolated_bridge = self._find_isolated_bridge()
@@ -97,28 +122,25 @@ class VPNManager(DockerBaseManager):
             return
         self._configure_host_network()
 
-        # set successful initiation of VPN connection
-        self.has_vpn = True
-        self.log.debug("VPN client container was started")
-
     def has_connection(self) -> bool:
         """ Return True if VPN connection is active """
-        if not self.has_vpn:
-            return False
-        # check if the VPN container has an IP address in the VPN namespace
-        try:
-            # if there is a VPN connection, the following command will return
-            # a json vpn interface. If not, it will return "Device "tun0" does
-            # not exist."
-            _, vpn_interface = self.vpn_client_container.exec_run(
-                'ip --json addr show dev tun0'
-            )
-            vpn_interface = json.loads(vpn_interface)
-        except JSONDecodeError:
-            self.has_vpn = False
-            return False
-        self.has_vpn = True  # TODO rid boolean and only use this function?
-        return True
+        self.log.debug("Waiting for VPN connection. This may take a minute...")
+        n_attempt = 0
+        self.has_vpn = False
+        while n_attempt < MAX_CHECK_VPN_ATTEMPTS:
+            n_attempt += 1
+            try:
+                _, vpn_interface = self.vpn_client_container.exec_run(
+                    'ip --json addr show dev tun0'
+                )
+                vpn_interface = json.loads(vpn_interface)
+                self.has_vpn = True
+                break
+            except (JSONDecodeError, docker.errors.APIError):
+                # JSONDecodeError if VPN is not setup yet, APIError if VPN
+                # container is restarting (e.g. due to connection errors)
+                time.sleep(1)
+        return self.has_vpn
 
     def exit_vpn(self) -> None:
         """
@@ -158,21 +180,16 @@ class VPNManager(DockerBaseManager):
         str
             IP address assigned to VPN client container by VPN server
         """
-        # VPN might not be fully set up at this point. Therefore, poll to
-        # check. When it is ready, extract the IP address.
-        n_attempt = 0
-        while n_attempt < MAX_CHECK_VPN_ATTEMPTS:
-            n_attempt += 1
-            try:
-                _, vpn_interface = self.vpn_client_container.exec_run(
-                    'ip --json addr show dev tun0'
-                )
-                vpn_interface = json.loads(vpn_interface)
-                break
-            except (JSONDecodeError, docker.errors.APIError):
-                # JSONDecodeError if VPN is not setup yet, APIError if VPN
-                # container is restarting (e.g. due to connection errors)
-                time.sleep(1)
+        try:
+            _, vpn_interface = self.vpn_client_container.exec_run(
+                'ip --json addr show dev tun0'
+            )
+            vpn_interface = json.loads(vpn_interface)
+        except (JSONDecodeError, docker.errors.APIError):
+            # JSONDecodeError if VPN is not setup yet, APIError if VPN
+            # container is restarting (e.g. due to connection errors)
+            raise ConnectionError(
+                "Could not get VPN IP: VPN is not connected!")
         return vpn_interface[0]['addr_info'][0]['local']
 
     def forward_vpn_traffic(self, helper_container: Container,
@@ -224,7 +241,7 @@ class VPNManager(DockerBaseManager):
         # add IP route line to the algorithm container network
         cmd = f"ip route replace default via {vpn_local_ip}"
         self.docker.containers.run(
-            image='alpine',
+            image=self.alpine_image,
             network=network,
             cap_add='NET_ADMIN',
             command=cmd,
@@ -269,7 +286,7 @@ class VPNManager(DockerBaseManager):
         occupied_ports = occupied_ports.output.decode('utf-8')
         occupied_ports = occupied_ports.split('\n')
         occupied_ports = \
-            [int(port) for port in occupied_ports if port is not '']
+            [int(port) for port in occupied_ports if port != '']
 
         # take first available port
         vpn_client_port_options = set(FREE_PORT_RANGE) - set(occupied_ports)
